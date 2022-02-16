@@ -27,7 +27,7 @@ async function httpAddNewContactusInfo(req, res) {
     }
 
     await saveContactusInfo(payload);
-
+    console.log("Saved Contact Us Info!")
     await sendEmail('[WEBSITE] [Contact us] Form Submission', `<p>Hi,</p> </br><p>The following details were submitted in the contact us page on the website.</p></br><div><strong>Name: </strong>${payload.name}</div> <div><strong>Email: </strong>${payload.email}</div> <div><strong>Subject: </strong>${payload.subject}</div> <div><strong>Message: </strong>${payload.message}</div><br><div>Thanks,</div><div>Info Account</div><div><a href="https://nekotopia.co/" target="_blank">nekotopia.co</a></div>`)
     return res.status(201).json(payload);
 }
