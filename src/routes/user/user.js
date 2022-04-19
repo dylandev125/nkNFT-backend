@@ -1,42 +1,112 @@
 const User = require("../../models/user.mongo");
 const express = require("express");
 const bcrypt = require('bcryptjs');
+const uuidToHex = require('uuid-to-hex');
+const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
+const { docClient, table, dynamodb } = require('../../services/dynamo');
+const crypto = require('crypto');
+
 
 const userRouter = express.Router();
+
+function capitalizeWords(string) {
+    return string.toLowerCase().replace(/(?:^|\s)\S/g, function(a) { return a.toUpperCase(); });
+};
+
+
+userRouter.get("/all", async (req, res) => {
+    var params = {
+        TableName: table
+    };
+
+    docClient.scan(params, (err, data) => {
+        if (err) {
+            console.log(err);
+        } else {
+            var items = [];
+            for (var i in data.Items)
+                items.push(data.Items[i]);
+
+            res.contentType = 'application/json';
+            res.send(items);
+        }
+    });
+});
 
 userRouter.post("/register", async (req, res) => {
 
     try {
-        const { first_name, last_name, email, password } = req.body;
+        const { username, email, password } = req.body;
 
-        if (!(email && password && first_name && last_name)) {
-            res.status(400).send("All input is required");
+        if (!(email && password && username)) {
+            return res.status(400).send("All input is required");
         }
-        const oldUser = await User.findOne({ email });
 
-        if (oldUser) {
+        if (! /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email)) {
+            return res.status(400).send("Email is not valid");
+        }
+
+        if(! /^([A-z]{3,16})$/.test(username)) {
+            return res.status(400).send("Username is not valid");
+        }
+
+        var params = {
+            TableName: table,
+            Key: {
+                "email": email,
+            }
+        };
+        var result = await docClient.get(params).promise();
+
+        if(result?.Item) {
             return res.status(409).send("User Already Exist. Please Login");
         }
 
-        encryptedPassword = await bcrypt.hash(password, 10);
+        var params2 = {
+            TableName: table,
+            Key: {
+                "username": capitalizeWords(username),
+            }
+        };
+        var result2 = await docClient.get(params2).promise();
+        if (result2 ?. Item) {
+            return res.status(409).send("Username Already Exist.");
+        }
+        const Id = uuidv4();
+        const hexId = uuidToHex(Id);
+        const hashWord = capitalizeWords(username) + ':neko:' + password;
 
-        const user = await User.create({
-            first_name,
-            last_name,
-            email: email.toLowerCase(),
-            password: encryptedPassword,
+        encryptedPassword = crypto.createHash('sha256').update(hashWord).digest('hex')
+
+        var params = {
+            TableName: table,
+            Item: {
+                "userid": hexId,
+                "username": capitalizeWords(username),
+                "email": email,
+                "password": encryptedPassword,
+                "highscore": 0
+            }
+        };
+
+        await docClient.put(params, (err, data) => {
+            if (err) {
+                console.error("Unable to add item.");
+                console.error("Error JSON:", JSON.stringify(err, null, 2));
+            } else {
+                //console.log("Added item:", JSON.stringify(data, null, 2));
+            }
         });
 
         const token = jwt.sign(
-            { user_id: user._id, email },
+            { user_id: hexId, email },
             process.env.TOKEN_KEY,
             {
                 expiresIn: "2h",
             }
         );
-        user.token = token;
-        res.status(200).json(user);
+        res.status(200).json(token);
     } catch (err) {
         console.log(err);
     }
@@ -50,20 +120,27 @@ userRouter.post("/login", async (req, res) => {
         if (!(email && password)) {
             res.status(400).send("All input is required");
         }
-        const user = await User.findOne({ email });
 
-        if (user && (await bcrypt.compare(password, user.password))) {
-            const token = jwt.sign(
-                { user_id: user._id, email },
-                process.env.TOKEN_KEY,
-                {
-                    expiresIn: "2h",
-                }
-            );
-
-            user.token = token;
-
-            res.status(200).json(token);
+        var params = {
+            TableName: table,
+            Key: {
+                "email": email,
+            }
+        };
+        var result = await docClient.get(params).promise();
+        if(result?.Item) {
+            let hashWord = capitalizeWords(result.Item.username) + ':neko:' + password;
+            let hashPassword = crypto.createHash('sha256').update(hashWord).digest('hex')
+            if(result.Item.password == hashPassword) {
+                const token = jwt.sign(
+                    { user_id: result.Item.userid, email },
+                    process.env.TOKEN_KEY,
+                    {
+                        expiresIn: "2h",
+                    }
+                );
+                return res.status(200).send(token);
+            }
         }
         res.status(400).send("Invalid Credentials");
     } catch (err) {
