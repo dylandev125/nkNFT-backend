@@ -59,7 +59,7 @@ userRouter.post("/register", async (req, res) => {
         };
         var result = await docClient.get(params).promise();
 
-        if(result?.Item) {
+        if(result.?Item) {
             return res.status(409).send("User Already Exist. Please Login");
         }
 
