@@ -3,6 +3,17 @@ const { MerkleTree } = require('merkletreejs');
 const keccak256 = require('keccak256');
 const fs = require('fs');
 
+const getRoot = () => {
+  const rawdata = fs.readFileSync(`./src/services/whitelist.json`);
+
+  const whiteListArray = JSON.parse(rawdata);
+
+  const leaves = whiteListArray.map((v) => keccak256(v));
+  const tree = new MerkleTree(leaves, keccak256, { sort: true });
+  const root = tree.getHexRoot();
+  return root;
+}
+
 const verifyWhitelist = (address) => {
   // Wallet Validate
   const valid = WAValidator.validate(address, 'ETH');
@@ -31,6 +42,13 @@ const verifyWhitelist = (address) => {
   return { proof, leaf, verified };
 };
 
+const getAllList = () => {
+  const rawdata = fs.readFileSync(`./src/services/whitelist.json`);
+  const whiteListArray = JSON.parse(rawdata);
+  console.log(whiteListArray);
+  return whiteListArray;
+}
+
 const addWhiteList = (whitelist) => {
   const list_arr = whitelist.split(',');
   const rawdata = fs.readFileSync(`./src/services/whitelist.json`);
@@ -53,5 +71,7 @@ const removeWhiteList = (whitelist) => {
 module.exports = {
   verifyWhitelist,
   addWhiteList,
-  removeWhiteList
+  removeWhiteList,
+  getAllList,
+  getRoot
 };
