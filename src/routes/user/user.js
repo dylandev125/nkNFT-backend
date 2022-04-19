@@ -70,7 +70,7 @@ userRouter.post("/register", async (req, res) => {
             }
         };
         var result2 = await docClient.get(params2).promise();
-        if (result2 ?. Item) {
+        if (result2.?Item) {
             return res.status(409).send("Username Already Exist.");
         }
         const Id = uuidv4();
@@ -128,7 +128,7 @@ userRouter.post("/login", async (req, res) => {
             }
         };
         var result = await docClient.get(params).promise();
-        if(result?.Item) {
+        if(result.?Item) {
             let hashWord = capitalizeWords(result.Item.username) + ':neko:' + password;
             let hashPassword = crypto.createHash('sha256').update(hashWord).digest('hex')
             if(result.Item.password == hashPassword) {
