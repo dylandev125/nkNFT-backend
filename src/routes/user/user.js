@@ -70,7 +70,7 @@ userRouter.post("/register", async (req, res) => {
             }
         };
         var result2 = await docClient.get(params2).promise();
-        if (result2.?Item) {
+        if (result2.Item) {
             return res.status(409).send("Username Already Exist.");
         }
         const Id = uuidv4();
