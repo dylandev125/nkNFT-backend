@@ -64,13 +64,15 @@ userRouter.post("/register", async (req, res) => {
         }
 
         var params2 = {
-            TableName: table,
-            Key: {
-                "username": capitalizeWords(username),
-            }
-        };
-        var result2 = await docClient.get(params2).promise();
-        if (result2 ?. Item) {
+            FilterExpression: 'username = :username',
+            ExpressionAttributeValues: {
+              ":username": capitalizeWords(username)
+            },
+            TableName : table
+        }
+        var result2 = await docClient.scan(params2).promise();
+        console.log(result2)
+        if (result2 ?. Items) {
             return res.status(409).send("Username Already Exist.");
         }
         const Id = uuidv4();
