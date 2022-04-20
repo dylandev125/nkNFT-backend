@@ -34,21 +34,40 @@ userRouter.get("/all", async (req, res) => {
     });
 });
 
-userRouter.post("/register", async (req, res) => {
+userRouter.get("/checkUsername", async (req, res) => {
+    const {username} = req.body
+    try{
+        params = {
+            TableName: table,
+            FilterExpression: "username = :t",
+            ExpressionAttributeValues: {
+                ":t": capitalizeWords(username)
+            },
+        };
+        result = await docClient.scan(params).promise()
+        if (result.Count > 0) {
+            return res.status(409).send({"status":"failed","error": "Username already exists"});
+        }
+        return res.status(200).json({"status": "success", "message": "Username available"})
+    }catch (err) {
+        console.log(err);
+    }
+})
 
+userRouter.post("/register", async (req, res) => {
     try {
         const { username, email, password } = req.body;
 
         if (!(email && password && username)) {
-            return res.status(400).send("All input is required");
+            return res.status(400).json({"status":"failed","error": "Please fill all details"});
         }
 
-        if (! /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email)) {
-            return res.status(400).send("Email is not valid");
+        if (! /(\w+)(\.|_)?(\w*)@(\w+)(\.(\w+))+/.test(email)) {
+            return res.status(400).send({"status":"failed","error": "Provide a valid email"});
         }
 
         if(! /^([A-z]{3,16})$/.test(username)) {
-            return res.status(400).send("Username is not valid");
+            return res.status(400).send({"status":"failed","error": "Invalid username. Only letters allowed and must be of length 3-16"});
         }
 
         var params = {
@@ -58,30 +77,27 @@ userRouter.post("/register", async (req, res) => {
             }
         };
         var result = await docClient.get(params).promise();
-
-        if(result?.Item) {
-            return res.status(409).send("User Already Exist. Please Login");
+        if(result.Item) {
+            return res.status(409).send({"status":"failed","error": "User already exists.Please Login"});
         }
 
-        var params2 = {
-            FilterExpression: 'username = :username',
+        params = {
+            TableName: table,
+            FilterExpression: "username = :t",
             ExpressionAttributeValues: {
-              ":username": capitalizeWords(username)
+                ":t": capitalizeWords(username)
             },
-            TableName : table
+        };
+        result = await docClient.scan(params).promise()
+        if (result.Count > 0) {
+            return res.status(409).send({"status":"failed","error": "Username Already Exists"});
         }
-        var result2 = await docClient.scan(params2).promise();
-        console.log(result2)
-        if (result2 ?. Items) {
-            return res.status(409).send("Username Already Exist.");
-        }
-        const Id = uuidv4();
-        const hexId = uuidToHex(Id);
+        const hexId = uuidToHex(uuidv4());
         const hashWord = capitalizeWords(username) + ':neko:' + password;
 
         encryptedPassword = crypto.createHash('sha256').update(hashWord).digest('hex')
 
-        var params = {
+        params = {
             TableName: table,
             Item: {
                 "userid": hexId,
@@ -97,18 +113,16 @@ userRouter.post("/register", async (req, res) => {
                 console.error("Unable to add item.");
                 console.error("Error JSON:", JSON.stringify(err, null, 2));
             } else {
-                //console.log("Added item:", JSON.stringify(data, null, 2));
+                    const token = jwt.sign(
+                    { user_id: hexId, email },
+                    process.env.TOKEN_KEY,
+                    {
+                        expiresIn: "2h",
+                    }
+                );
+                res.status(200).json({"status":"success","token":token});
             }
         });
-
-        const token = jwt.sign(
-            { user_id: hexId, email },
-            process.env.TOKEN_KEY,
-            {
-                expiresIn: "2h",
-            }
-        );
-        res.status(200).json(token);
     } catch (err) {
         console.log(err);
     }
@@ -120,7 +134,7 @@ userRouter.post("/login", async (req, res) => {
         const { email, password } = req.body;
 
         if (!(email && password)) {
-            res.status(400).send("All input is required");
+            res.status(400).send({"status":"failed","error":"Please fill all details"});
         }
 
         var params = {
@@ -130,7 +144,7 @@ userRouter.post("/login", async (req, res) => {
             }
         };
         var result = await docClient.get(params).promise();
-        if(result?.Item) {
+        if(result.Item) {
             let hashWord = capitalizeWords(result.Item.username) + ':neko:' + password;
             let hashPassword = crypto.createHash('sha256').update(hashWord).digest('hex')
             if(result.Item.password == hashPassword) {
@@ -141,10 +155,10 @@ userRouter.post("/login", async (req, res) => {
                         expiresIn: "2h",
                     }
                 );
-                return res.status(200).send(token);
+                return res.status(200).json({"status":"success","token":token});
             }
         }
-        res.status(400).send("Invalid Credentials");
+        res.status(400).send({"status":"failed","error":"Invalid Credentials"});
     } catch (err) {
         console.log(err);
     }
