@@ -111,7 +111,6 @@ userRouter.post("/register", async (req, res) => {
         await docClient.put(params, (err, data) => {
             if (err) {
                 console.error("Unable to add item.");
-                console.error("Error JSON:", JSON.stringify(err, null, 2));
             } else {
                     const token = jwt.sign(
                     { user_id: hexId, email },
